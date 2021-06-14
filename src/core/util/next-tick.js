@@ -19,7 +19,7 @@ function flushCallbacks () {
   }
 }
 
-// Here we have async deferring wrappers using microtasks.
+// Here we have async deferring wrappers using microtasks. 微任务
 // In 2.5 we used (macro) tasks (in combination with microtasks).
 // However, it has subtle problems when state is changed right before repaint
 // (e.g. #6813, out-in transitions).
@@ -30,6 +30,11 @@ function flushCallbacks () {
 // where microtasks have too high a priority and fire in between supposedly
 // sequential events (e.g. #4521, #6690, which have workarounds)
 // or even between bubbling of the same event (#6566).
+// 异步机制的实现
+// 首先尝试用微任务实现（微任务首选promise）
+// 然后是 微任务 MutationObserver
+// 然后是宏任务 setImmediate
+// 最后是宏任务 setTimeout
 let timerFunc
 
 // The nextTick behavior leverages the microtask queue, which can be accessed

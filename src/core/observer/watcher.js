@@ -44,15 +44,17 @@ export default class Watcher {
 
   constructor (
     vm: Component,
-    expOrFn: string | Function,
+    expOrFn: string | Function,  // 关注这个
     cb: Function,
     options?: ?Object,
     isRenderWatcher?: boolean
   ) {
     this.vm = vm
+    // 一个组件对应一个watcher，dep对应一个key
     if (isRenderWatcher) {
       vm._watcher = this
     }
+    // 用户自己写的watcher
     vm._watchers.push(this)
     // options
     if (options) {
@@ -125,11 +127,14 @@ export default class Watcher {
   /**
    * Add a dependency to this directive.
    */
+  // watcher 和 dep相互添加
+  // 是一个多对多的关系
   addDep (dep: Dep) {
     const id = dep.id
+    // 去重处理
     if (!this.newDepIds.has(id)) {
       this.newDepIds.add(id)
-      this.newDeps.push(dep)
+      this.newDeps.push(dep) // watcher里面为什么要保存dep？？
       if (!this.depIds.has(id)) {
         dep.addSub(this)
       }
@@ -168,6 +173,7 @@ export default class Watcher {
     } else if (this.sync) {
       this.run()
     } else {
+      // 更新的异步队列
       queueWatcher(this)
     }
   }

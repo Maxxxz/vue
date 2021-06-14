@@ -1,5 +1,5 @@
 /* @flow */
-
+// 都是web中的dom的操作
 import { namespaceMap } from 'web/util/index'
 
 export function createElement (tagName: string, vnode: VNode): Element {

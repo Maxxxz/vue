@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html data-framework="vue">
+  <head>
+    <meta charset="utf-8" />
+    <title>Vue.js • TodoMVC</title>
+
+    <style>
+      [v-cloak] {
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+
+    <script src="../../dist/vue.js"></script>
+    <script>
+      class Test {
+        constructor(height, width) {
+          this.name = "Polygon";
+          this.datas = this.data();
+        }
+        data() {
+          return {
+            a: 1,
+            b: 2,
+          };
+        }
+      }
+      Test.prototype.d = { a: 1 };
+      var q = new Test();
+      var w = new Test();
+      q.d.a = 2;
+      q.datas.a = 2;
+      console.log(q.d); // {a: 2}
+      console.log(w.d); // {a: 2}
+    </script>
+  </body>
+</html>

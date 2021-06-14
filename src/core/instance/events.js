@@ -15,7 +15,7 @@ export function initEvents (vm: Component) {
   // init parent attached events
   const listeners = vm.$options._parentListeners
   if (listeners) {
-    updateComponentListeners(vm, listeners)
+    updateComponentListeners(vm, listeners)  // 对应的事件处理
   }
 }
 

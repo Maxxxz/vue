@@ -31,7 +31,7 @@ extend(Vue.options.directives, platformDirectives)
 extend(Vue.options.components, platformComponents)
 
 // install platform patch function
-Vue.prototype.__patch__ = inBrowser ? patch : noop
+Vue.prototype.__patch__ = inBrowser ? patch : noop   // __patch__ 这类命名一般是不让用户外部调用，给到内部自己调
 
 // public mount method
 Vue.prototype.$mount = function (
@@ -39,7 +39,7 @@ Vue.prototype.$mount = function (
   hydrating?: boolean
 ): Component {
   el = el && inBrowser ? query(el) : undefined
-  return mountComponent(this, el, hydrating)
+  return mountComponent(this, el, hydrating)  // 把虚拟dom变成真实dom
 }
 
 // devtools global hook

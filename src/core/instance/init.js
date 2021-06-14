@@ -30,11 +30,13 @@ export function initMixin (Vue: Class<Component>) {
     vm._isVue = true
     // merge options
     if (options && options._isComponent) {
+      // 自定义函数走这里
       // optimize internal component instantiation
       // since dynamic options merging is pretty slow, and none of the
       // internal component options needs special treatment.
       initInternalComponent(vm, options)
     } else {
+      // 根实例走这里
       vm.$options = mergeOptions(
         resolveConstructorOptions(vm.constructor),
         options || {},
@@ -50,12 +52,14 @@ export function initMixin (Vue: Class<Component>) {
     // expose real self
     vm._self = vm
     initLifecycle(vm)
+    // 基础
     initEvents(vm)
     initRender(vm)
-    callHook(vm, 'beforeCreate')
+    callHook(vm, 'beforeCreate') // beforeCreate拿不到date props相关数据
+    // 数据相关
     initInjections(vm) // resolve injections before data/props
-    initState(vm)
-    initProvide(vm) // resolve provide after data/props
+    initState(vm)   // 数据初始化
+    initProvide(vm) // resolve provide after data/props 给后代的数据
     callHook(vm, 'created')
 
     /* istanbul ignore if */

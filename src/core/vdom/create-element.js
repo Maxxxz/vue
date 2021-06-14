@@ -97,12 +97,14 @@ export function _createElement (
     let Ctor
     ns = (context.$vnode && context.$vnode.ns) || config.getTagNamespace(tag)
     if (config.isReservedTag(tag)) {
+      // 原生标签 div,span等
       // platform built-in elements
       vnode = new VNode(
         config.parsePlatformTagName(tag), data, children,
         undefined, undefined, context
       )
     } else if ((!data || !data.pre) && isDef(Ctor = resolveAsset(context.$options, 'components', tag))) {
+      // 自定义的标签，一般是组件
       // component
       vnode = createComponent(Ctor, data, context, children, tag)
     } else {

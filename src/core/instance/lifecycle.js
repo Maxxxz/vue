@@ -38,13 +38,13 @@ export function initLifecycle (vm: Component) {
     while (parent.$options.abstract && parent.$parent) {
       parent = parent.$parent
     }
-    parent.$children.push(vm)
+    parent.$children.push(vm) // 把自己推给父的children中
   }
 
   vm.$parent = parent
   vm.$root = parent ? parent.$root : vm
 
-  vm.$children = []
+  vm.$children = [] // 创建空的孩子列表
   vm.$refs = {}
 
   vm._watcher = null
@@ -56,6 +56,7 @@ export function initLifecycle (vm: Component) {
 }
 
 export function lifecycleMixin (Vue: Class<Component>) {
+  // _update 的核心作用：把vnode转化为真实dom
   Vue.prototype._update = function (vnode: VNode, hydrating?: boolean) {
     const vm: Component = this
     const prevEl = vm.$el
@@ -138,6 +139,7 @@ export function lifecycleMixin (Vue: Class<Component>) {
   }
 }
 
+// 在mount中执行虚拟dom变成dom的操作
 export function mountComponent (
   vm: Component,
   el: ?Element,
@@ -166,6 +168,7 @@ export function mountComponent (
   }
   callHook(vm, 'beforeMount')
 
+  // 组件更新函数
   let updateComponent
   /* istanbul ignore if */
   if (process.env.NODE_ENV !== 'production' && config.performance && mark) {
@@ -176,24 +179,25 @@ export function mountComponent (
       const endTag = `vue-perf-end:${id}`
 
       mark(startTag)
-      const vnode = vm._render()
+      const vnode = vm._render() // _render 业务逻辑出来的虚拟dom
       mark(endTag)
       measure(`vue ${name} render`, startTag, endTag)
 
       mark(startTag)
-      vm._update(vnode, hydrating)
+      vm._update(vnode, hydrating)  // 调用了组件的_update
       mark(endTag)
       measure(`vue ${name} patch`, startTag, endTag)
     }
   } else {
     updateComponent = () => {
-      vm._update(vm._render(), hydrating)
+      vm._update(vm._render(), hydrating)  // 调用了组件的_update
     }
   }
 
   // we set this to vm._watcher inside the watcher's constructor
   // since the watcher's initial patch may call $forceUpdate (e.g. inside child
   // component's mounted hook), which relies on vm._watcher being already defined
+  // 给组件创建一个watcher实例！！
   new Watcher(vm, updateComponent, noop, {
     before () {
       if (vm._isMounted && !vm._isDestroyed) {

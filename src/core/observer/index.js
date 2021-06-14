@@ -44,14 +44,17 @@ export class Observer {
     this.dep = new Dep()
     this.vmCount = 0
     def(value, '__ob__', this)
+    // 判断是纯对象还是数组
     if (Array.isArray(value)) {
       if (hasProto) {
-        protoAugment(value, arrayMethods)
+        protoAugment(value, arrayMethods) // arrayMethods 数组里的拦截
       } else {
         copyAugment(value, arrayMethods, arrayKeys)
       }
+      // 处理数组的响应式，对数组的里的每一项做observe
       this.observeArray(value)
     } else {
+      // 对象的处理
       this.walk(value)
     }
   }
@@ -153,15 +156,19 @@ export function defineReactive (
     val = obj[key]
   }
 
+  // val 是对象，就向下递归
   let childOb = !shallow && observe(val)
   Object.defineProperty(obj, key, {
     enumerable: true,
     configurable: true,
     get: function reactiveGetter () {
       const value = getter ? getter.call(obj) : val
+      // 添加wacther实例。
       if (Dep.target) {
         dep.depend()
+        // 有子对象要额外处理
         if (childOb) {
+          // 把watcher也添加到子对象中
           childOb.dep.depend()
           if (Array.isArray(value)) {
             dependArray(value)
@@ -173,7 +180,7 @@ export function defineReactive (
     set: function reactiveSetter (newVal) {
       const value = getter ? getter.call(obj) : val
       /* eslint-disable no-self-compare */
-      if (newVal === value || (newVal !== newVal && value !== value)) {
+      if (newVal === value || (newVal !== newVal && value !== value)) { // newVal !== newVal 是指NaN
         return
       }
       /* eslint-enable no-self-compare */
@@ -187,7 +194,7 @@ export function defineReactive (
       } else {
         val = newVal
       }
-      childOb = !shallow && observe(newVal)
+      childOb = !shallow && observe(newVal)  // 孩子层也会受到影响，通知其更新
       dep.notify()
     }
   })

@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html data-framework="vue">
+  <head>
+    <meta charset="utf-8" />
+    <title>Vue.js • key</title>
+
+    <style>
+      [v-cloak] {
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app">
+      <p v-for="item in items" :key="item">{{item}}</p>
+    </div>
+
+    <script src="../../dist/vue.js"></script>
+    <script>
+      const app = new Vue({
+        el: '#app',
+        data: {
+          items: ['a', 'b', 'c', 'd','e']
+        },
+        mounted(){
+          setTimeout(()=>{
+            // 在c前面插入f
+            this.items.splice(2, 0, 'f')
+          },2000)
+        }
+      })
+    </script>
+  </body>
+</html>

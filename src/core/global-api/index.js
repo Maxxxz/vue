@@ -53,7 +53,7 @@ export function initGlobalAPI (Vue: GlobalAPI) {
 
   Vue.options = Object.create(null)
   ASSET_TYPES.forEach(type => {
-    Vue.options[type + 's'] = Object.create(null)
+    Vue.options[type + 's'] = Object.create(null) // 合并配置项
   })
 
   // this is used to identify the "base" constructor to extend all plain-object

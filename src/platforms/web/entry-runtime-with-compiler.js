@@ -3,7 +3,7 @@
 import config from 'core/config'
 import { warn, cached } from 'core/util/index'
 import { mark, measure } from 'core/util/perf'
-
+// 这个vue从哪来
 import Vue from './runtime/index'
 import { query } from './util/index'
 import { compileToFunctions } from './compiler/index'
@@ -15,8 +15,9 @@ const idToTemplate = cached(id => {
 })
 
 const mount = Vue.prototype.$mount
+// 接管$mount
 Vue.prototype.$mount = function (
-  el?: string | Element,
+  el?: string | Element, // #app | document.querySelector('#app')
   hydrating?: boolean
 ): Component {
   el = el && query(el)
@@ -56,19 +57,22 @@ Vue.prototype.$mount = function (
     } else if (el) {
       template = getOuterHTML(el)
     }
+
+    // 开始编译过程(只有没设置render的时候才用)
     if (template) {
       /* istanbul ignore if */
       if (process.env.NODE_ENV !== 'production' && config.performance && mark) {
         mark('compile')
       }
-
+      // 把template转成render函数
       const { render, staticRenderFns } = compileToFunctions(template, {
         outputSourceRange: process.env.NODE_ENV !== 'production',
         shouldDecodeNewlines,
         shouldDecodeNewlinesForHref,
-        delimiters: options.delimiters,
+        delimiters: options.delimiters,  // 分隔符 vue默认{{}}
         comments: options.comments
       }, this)
+      // render赋值
       options.render = render
       options.staticRenderFns = staticRenderFns
 
@@ -79,6 +83,8 @@ Vue.prototype.$mount = function (
       }
     }
   }
+
+  // 挂载：生成vdom，生成dom，追加到el
   return mount.call(this, el, hydrating)
 }
 
