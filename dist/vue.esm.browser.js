@@ -1,6 +1,6 @@
 /*!
  * Vue.js v2.6.10
- * (c) 2014-2019 Evan You
+ * (c) 2014-2021 Evan You
  * Released under the MIT License.
  */
 /*  */
@@ -730,6 +730,7 @@ class Dep {
 
   depend () {
     if (Dep.target) {
+      // ?
       Dep.target.addDep(this);
     }
   }
@@ -737,7 +738,7 @@ class Dep {
   notify () {
     // stabilize the subscriber list first
     const subs = this.subs.slice();
-    if (!config.async) {
+    if ( !config.async) {
       // subs aren't sorted in scheduler if not running async
       // we need to sort them now to make sure they fire in correct
       // order
@@ -887,6 +888,8 @@ function cloneVNode (vnode) {
 const arrayProto = Array.prototype;
 const arrayMethods = Object.create(arrayProto);
 
+// data里添加数据之后，只有通过这7个操作的方法，才能触发更新
+// defineProperty 没法对数组的的变更添加监听，因此只能针对array类的api进行劫持
 const methodsToPatch = [
   'push',
   'pop',
@@ -902,10 +905,16 @@ const methodsToPatch = [
  */
 methodsToPatch.forEach(function (method) {
   // cache original method
+  // 获取原始的操作方法
   const original = arrayProto[method];
+  // 定义拦截
+  // def做的事情=Object.defineProperty(arrayMethods, method, {value: mutator})
   def(arrayMethods, method, function mutator (...args) {
+    // 先执行之前的行为
     const result = original.apply(this, args);
+    // 定义数组方法额外的行为
     const ob = this.__ob__;
+    // start 新加入的元素要添加响应式
     let inserted;
     switch (method) {
       case 'push':
@@ -917,7 +926,9 @@ methodsToPatch.forEach(function (method) {
         break
     }
     if (inserted) ob.observeArray(inserted);
+    // end 新加入的元素要添加响应式
     // notify change
+    // 拿到dep做通知，触发界面更新
     ob.dep.notify();
     return result
   });
@@ -953,14 +964,17 @@ class Observer {
     this.dep = new Dep();
     this.vmCount = 0;
     def(value, '__ob__', this);
+    // 判断是纯对象还是数组
     if (Array.isArray(value)) {
       if (hasProto) {
-        protoAugment(value, arrayMethods);
+        protoAugment(value, arrayMethods); // arrayMethods 数组里的拦截
       } else {
         copyAugment(value, arrayMethods, arrayKeys);
       }
+      // 处理数组的响应式，对数组的里的每一项做observe
       this.observeArray(value);
     } else {
+      // 对象的处理
       this.walk(value);
     }
   }
@@ -973,7 +987,7 @@ class Observer {
   walk (obj) {
     const keys = Object.keys(obj);
     for (let i = 0; i < keys.length; i++) {
-      defineReactive$$1(obj, keys[i]);
+      defineReactive(obj, keys[i]);
     }
   }
 
@@ -1041,7 +1055,7 @@ function observe (value, asRootData) {
 /**
  * Define a reactive property on an Object.
  */
-function defineReactive$$1 (
+function defineReactive (
   obj,
   key,
   val,
@@ -1062,15 +1076,19 @@ function defineReactive$$1 (
     val = obj[key];
   }
 
+  // val 是对象，就向下递归
   let childOb = !shallow && observe(val);
   Object.defineProperty(obj, key, {
     enumerable: true,
     configurable: true,
     get: function reactiveGetter () {
       const value = getter ? getter.call(obj) : val;
+      // 添加wacther实例。
       if (Dep.target) {
         dep.depend();
+        // 有子对象要额外处理
         if (childOb) {
+          // 把watcher也添加到子对象中
           childOb.dep.depend();
           if (Array.isArray(value)) {
             dependArray(value);
@@ -1082,11 +1100,11 @@ function defineReactive$$1 (
     set: function reactiveSetter (newVal) {
       const value = getter ? getter.call(obj) : val;
       /* eslint-disable no-self-compare */
-      if (newVal === value || (newVal !== newVal && value !== value)) {
+      if (newVal === value || (newVal !== newVal && value !== value)) { // newVal !== newVal 是指NaN
         return
       }
       /* eslint-enable no-self-compare */
-      if (customSetter) {
+      if ( customSetter) {
         customSetter();
       }
       // #7981: for accessor properties without setter
@@ -1096,7 +1114,7 @@ function defineReactive$$1 (
       } else {
         val = newVal;
       }
-      childOb = !shallow && observe(newVal);
+      childOb = !shallow && observe(newVal);  // 孩子层也会受到影响，通知其更新
       dep.notify();
     }
   });
@@ -1108,7 +1126,8 @@ function defineReactive$$1 (
  * already exist.
  */
 function set (target, key, val) {
-  if (isUndef(target) || isPrimitive(target)
+  if (
+    (isUndef(target) || isPrimitive(target))
   ) {
     warn(`Cannot set reactive property on undefined, null, or primitive value: ${(target)}`);
   }
@@ -1123,7 +1142,7 @@ function set (target, key, val) {
   }
   const ob = (target).__ob__;
   if (target._isVue || (ob && ob.vmCount)) {
-    warn(
+     warn(
       'Avoid adding reactive properties to a Vue instance or its root $data ' +
       'at runtime - declare it upfront in the data option.'
     );
@@ -1133,7 +1152,7 @@ function set (target, key, val) {
     target[key] = val;
     return val
   }
-  defineReactive$$1(ob.value, key, val);
+  defineReactive(ob.value, key, val);
   ob.dep.notify();
   return val
 }
@@ -1142,7 +1161,8 @@ function set (target, key, val) {
  * Delete a property and trigger change if necessary.
  */
 function del (target, key) {
-  if (isUndef(target) || isPrimitive(target)
+  if (
+    (isUndef(target) || isPrimitive(target))
   ) {
     warn(`Cannot delete reactive property on undefined, null, or primitive value: ${(target)}`);
   }
@@ -1152,7 +1172,7 @@ function del (target, key) {
   }
   const ob = (target).__ob__;
   if (target._isVue || (ob && ob.vmCount)) {
-    warn(
+     warn(
       'Avoid deleting properties on a Vue instance or its root $data ' +
       '- just set it to null.'
     );
@@ -1288,7 +1308,7 @@ strats.data = function (
 ) {
   if (!vm) {
     if (childVal && typeof childVal !== 'function') {
-      warn(
+       warn(
         'The "data" option should be a function ' +
         'that returns a per-instance value in component ' +
         'definitions.',
@@ -1351,7 +1371,7 @@ function mergeAssets (
 ) {
   const res = Object.create(parentVal || null);
   if (childVal) {
-    assertObjectType(key, childVal, vm);
+     assertObjectType(key, childVal, vm);
     return extend(res, childVal)
   } else {
     return res
@@ -1526,9 +1546,9 @@ function normalizeDirectives (options) {
   const dirs = options.directives;
   if (dirs) {
     for (const key in dirs) {
-      const def$$1 = dirs[key];
-      if (typeof def$$1 === 'function') {
-        dirs[key] = { bind: def$$1, update: def$$1 };
+      const def = dirs[key];
+      if (typeof def === 'function') {
+        dirs[key] = { bind: def, update: def };
       }
     }
   }
@@ -1621,7 +1641,7 @@ function resolveAsset (
   if (hasOwn(assets, PascalCaseId)) return assets[PascalCaseId]
   // fallback to prototype chain
   const res = assets[id] || assets[camelizedId] || assets[PascalCaseId];
-  if (warnMissing && !res) {
+  if ( warnMissing && !res) {
     warn(
       'Failed to resolve ' + type.slice(0, -1) + ': ' + id,
       options
@@ -1683,7 +1703,7 @@ function getPropDefaultValue (vm, prop, key) {
   }
   const def = prop.default;
   // warn against non-factory defaults for Object & Array
-  if (isObject(def)) {
+  if ( isObject(def)) {
     warn(
       'Invalid default value for prop "' + key + '": ' +
       'Props with type Object/Array must use a factory function ' +
@@ -1943,7 +1963,7 @@ function flushCallbacks () {
   }
 }
 
-// Here we have async deferring wrappers using microtasks.
+// Here we have async deferring wrappers using microtasks. 微任务
 // In 2.5 we used (macro) tasks (in combination with microtasks).
 // However, it has subtle problems when state is changed right before repaint
 // (e.g. #6813, out-in transitions).
@@ -1954,6 +1974,11 @@ function flushCallbacks () {
 // where microtasks have too high a priority and fire in between supposedly
 // sequential events (e.g. #4521, #6690, which have workarounds)
 // or even between bubbling of the same event (#6566).
+// 异步机制的实现
+// 首先尝试用微任务实现（微任务首选promise）
+// 然后是 微任务 MutationObserver
+// 然后是宏任务 setImmediate
+// 最后是宏任务 setTimeout
 let timerFunc;
 
 // The nextTick behavior leverages the microtask queue, which can be accessed
@@ -2032,8 +2057,6 @@ function nextTick (cb, ctx) {
     })
   }
 }
-
-/*  */
 
 let mark;
 let measure;
@@ -2188,13 +2211,13 @@ function _traverse (val, seen) {
 const normalizeEvent = cached((name) => {
   const passive = name.charAt(0) === '&';
   name = passive ? name.slice(1) : name;
-  const once$$1 = name.charAt(0) === '~'; // Prefixed last, checked first
-  name = once$$1 ? name.slice(1) : name;
+  const once = name.charAt(0) === '~'; // Prefixed last, checked first
+  name = once ? name.slice(1) : name;
   const capture = name.charAt(0) === '!';
   name = capture ? name.slice(1) : name;
   return {
     name,
-    once: once$$1,
+    once,
     capture,
     passive
   }
@@ -2221,17 +2244,17 @@ function updateListeners (
   on,
   oldOn,
   add,
-  remove$$1,
+  remove,
   createOnceHandler,
   vm
 ) {
-  let name, def$$1, cur, old, event;
+  let name, def, cur, old, event;
   for (name in on) {
-    def$$1 = cur = on[name];
+    def = cur = on[name];
     old = oldOn[name];
     event = normalizeEvent(name);
     if (isUndef(cur)) {
-      warn(
+       warn(
         `Invalid handler for event "${event.name}": got ` + String(cur),
         vm
       );
@@ -2251,7 +2274,7 @@ function updateListeners (
   for (name in oldOn) {
     if (isUndef(on[name])) {
       event = normalizeEvent(name);
-      remove$$1(event.name, oldOn[name], event.capture);
+      remove(event.name, oldOn[name], event.capture);
     }
   }
 }
@@ -2463,7 +2486,7 @@ function initInjections (vm) {
     Object.keys(result).forEach(key => {
       /* istanbul ignore else */
       {
-        defineReactive$$1(vm, key, result[key], () => {
+        defineReactive(vm, key, result[key], () => {
           warn(
             `Avoid mutating an injected value directly since the changes will be ` +
             `overwritten whenever the provided component re-renders. ` +
@@ -2706,7 +2729,7 @@ function renderSlot (
   if (scopedSlotFn) { // scoped slot
     props = props || {};
     if (bindObject) {
-      if (!isObject(bindObject)) {
+      if ( !isObject(bindObject)) {
         warn(
           'slot v-bind without argument expects an Object',
           this
@@ -2782,7 +2805,7 @@ function bindObjectProps (
 ) {
   if (value) {
     if (!isObject(value)) {
-      warn(
+       warn(
         'v-bind without argument expects an Object or Array value',
         this
       );
@@ -2888,7 +2911,7 @@ function markStaticNode (node, key, isOnce) {
 function bindObjectListeners (data, value) {
   if (value) {
     if (!isPlainObject(value)) {
-      warn(
+       warn(
         'v-on without argument expects an Object value',
         this
       );
@@ -2939,7 +2962,7 @@ function bindDynamicKeys (baseObj, values) {
     const key = values[i];
     if (typeof key === 'string' && key) {
       baseObj[values[i]] = values[i + 1];
-    } else if (key !== '' && key !== null) {
+    } else if ( key !== '' && key !== null) {
       // null is a speical value for explicitly removing a binding
       warn(
         `Invalid value for dynamic directive argument (expected string or null): ${key}`,
@@ -3117,12 +3140,6 @@ function mergeProps (to, from) {
     to[camelize(key)] = from[key];
   }
 }
-
-/*  */
-
-/*  */
-
-/*  */
 
 /*  */
 
@@ -3387,7 +3404,7 @@ function _createElement (
   normalizationType
 ) {
   if (isDef(data) && isDef((data).__ob__)) {
-    warn(
+     warn(
       `Avoid using observed data object as vnode data: ${JSON.stringify(data)}\n` +
       'Always create fresh vnode data objects in each render!',
       context
@@ -3403,7 +3420,8 @@ function _createElement (
     return createEmptyVNode()
   }
   // warn against non-primitive key
-  if (isDef(data) && isDef(data.key) && !isPrimitive(data.key)
+  if (
+    isDef(data) && isDef(data.key) && !isPrimitive(data.key)
   ) {
     {
       warn(
@@ -3431,12 +3449,14 @@ function _createElement (
     let Ctor;
     ns = (context.$vnode && context.$vnode.ns) || config.getTagNamespace(tag);
     if (config.isReservedTag(tag)) {
+      // 原生标签 div,span等
       // platform built-in elements
       vnode = new VNode(
         config.parsePlatformTagName(tag), data, children,
         undefined, undefined, context
       );
     } else if ((!data || !data.pre) && isDef(Ctor = resolveAsset(context.$options, 'components', tag))) {
+      // 自定义的标签，一般是组件
       // component
       vnode = createComponent(Ctor, data, context, children, tag);
     } else {
@@ -3510,6 +3530,7 @@ function initRender (vm) {
   vm._c = (a, b, c, d) => createElement(vm, a, b, c, d, false);
   // normalization is always applied for the public version, used in
   // user-written render functions.
+  // $createElement就是render返回的h函数
   vm.$createElement = (a, b, c, d) => createElement(vm, a, b, c, d, true);
 
   // $attrs & $listeners are exposed for easier HOC creation.
@@ -3518,10 +3539,10 @@ function initRender (vm) {
 
   /* istanbul ignore else */
   {
-    defineReactive$$1(vm, '$attrs', parentData && parentData.attrs || emptyObject, () => {
+    defineReactive(vm, '$attrs', parentData && parentData.attrs || emptyObject, () => {
       !isUpdatingChildComponent && warn(`$attrs is readonly.`, vm);
     }, true);
-    defineReactive$$1(vm, '$listeners', options._parentListeners || emptyObject, () => {
+    defineReactive(vm, '$listeners', options._parentListeners || emptyObject, () => {
       !isUpdatingChildComponent && warn(`$listeners is readonly.`, vm);
     }, true);
   }
@@ -3537,6 +3558,7 @@ function renderMixin (Vue) {
     return nextTick(fn, this)
   };
 
+  // 实现了渲染函数，返回虚拟dom，VNode===虚拟dom
   Vue.prototype._render = function () {
     const vm = this;
     const { render, _parentVnode } = vm.$options;
@@ -3559,13 +3581,13 @@ function renderMixin (Vue) {
       // separately from one another. Nested component's render fns are called
       // when parent component is patched.
       currentRenderingInstance = vm;
-      vnode = render.call(vm._renderProxy, vm.$createElement);
+      vnode = render.call(vm._renderProxy, vm.$createElement);  //  vm.$createElement 就是render函数里返回的h函数
     } catch (e) {
       handleError(e, vm, `render`);
       // return error render result,
       // or previous vnode to prevent render error causing blank component
       /* istanbul ignore else */
-      if (vm.$options.renderError) {
+      if ( vm.$options.renderError) {
         try {
           vnode = vm.$options.renderError.call(vm._renderProxy, vm.$createElement, e);
         } catch (e) {
@@ -3584,7 +3606,7 @@ function renderMixin (Vue) {
     }
     // return empty vnode in case the render function errored out
     if (!(vnode instanceof VNode)) {
-      if (Array.isArray(vnode)) {
+      if ( Array.isArray(vnode)) {
         warn(
           'Multiple root nodes returned from render function. Render function ' +
           'should return a single root node.',
@@ -3594,6 +3616,8 @@ function renderMixin (Vue) {
       vnode = createEmptyVNode();
     }
     // set parent
+    // 这里可以打断点观察一下！
+    // debugger
     vnode.parent = _parentVnode;
     return vnode
   };
@@ -3687,7 +3711,7 @@ function resolveAsyncComponent (
     });
 
     const reject = once(reason => {
-      warn(
+       warn(
         `Failed to resolve async component: ${String(factory)}` +
         (reason ? `\nReason: ${reason}` : '')
       );
@@ -3732,7 +3756,8 @@ function resolveAsyncComponent (
             timerTimeout = null;
             if (isUndef(factory.resolved)) {
               reject(
-                `timeout (${res.timeout}ms)`
+                 `timeout (${res.timeout}ms)`
+                  
               );
             }
           }, res.timeout);
@@ -3769,15 +3794,13 @@ function getFirstComponentChild (children) {
 
 /*  */
 
-/*  */
-
 function initEvents (vm) {
   vm._events = Object.create(null);
   vm._hasHookEvent = false;
   // init parent attached events
   const listeners = vm.$options._parentListeners;
   if (listeners) {
-    updateComponentListeners(vm, listeners);
+    updateComponentListeners(vm, listeners);  // 对应的事件处理
   }
 }
 
@@ -3926,13 +3949,13 @@ function initLifecycle (vm) {
     while (parent.$options.abstract && parent.$parent) {
       parent = parent.$parent;
     }
-    parent.$children.push(vm);
+    parent.$children.push(vm); // 把自己推给父的children中
   }
 
   vm.$parent = parent;
   vm.$root = parent ? parent.$root : vm;
 
-  vm.$children = [];
+  vm.$children = []; // 创建空的孩子列表
   vm.$refs = {};
 
   vm._watcher = null;
@@ -3944,6 +3967,7 @@ function initLifecycle (vm) {
 }
 
 function lifecycleMixin (Vue) {
+  // _update 的核心作用：把vnode转化为真实dom
   Vue.prototype._update = function (vnode, hydrating) {
     const vm = this;
     const prevEl = vm.$el;
@@ -4026,6 +4050,7 @@ function lifecycleMixin (Vue) {
   };
 }
 
+// 在mount中执行虚拟dom变成dom的操作
 function mountComponent (
   vm,
   el,
@@ -4054,9 +4079,10 @@ function mountComponent (
   }
   callHook(vm, 'beforeMount');
 
+  // 组件更新函数
   let updateComponent;
   /* istanbul ignore if */
-  if (config.performance && mark) {
+  if ( config.performance && mark) {
     updateComponent = () => {
       const name = vm._name;
       const id = vm._uid;
@@ -4064,24 +4090,25 @@ function mountComponent (
       const endTag = `vue-perf-end:${id}`;
 
       mark(startTag);
-      const vnode = vm._render();
+      const vnode = vm._render(); // _render 业务逻辑出来的虚拟dom
       mark(endTag);
       measure(`vue ${name} render`, startTag, endTag);
 
       mark(startTag);
-      vm._update(vnode, hydrating);
+      vm._update(vnode, hydrating);  // 调用了组件的_update
       mark(endTag);
       measure(`vue ${name} patch`, startTag, endTag);
     };
   } else {
     updateComponent = () => {
-      vm._update(vm._render(), hydrating);
+      vm._update(vm._render(), hydrating);  // 调用了组件的_update
     };
   }
 
   // we set this to vm._watcher inside the watcher's constructor
   // since the watcher's initial patch may call $forceUpdate (e.g. inside child
   // component's mounted hook), which relies on vm._watcher being already defined
+  // 给组件创建一个watcher实例！！
   new Watcher(vm, updateComponent, noop, {
     before () {
       if (vm._isMounted && !vm._isDestroyed) {
@@ -4319,9 +4346,10 @@ function flushSchedulerQueue () {
     }
     id = watcher.id;
     has[id] = null;
+    // 执行 watcher
     watcher.run();
     // in dev build, check and stop circular updates.
-    if (has[id] != null) {
+    if ( has[id] != null) {
       circular[id] = (circular[id] || 0) + 1;
       if (circular[id] > MAX_UPDATE_COUNT) {
         warn(
@@ -4393,6 +4421,7 @@ function queueWatcher (watcher) {
   if (has[id] == null) {
     has[id] = true;
     if (!flushing) {
+      // 推入队列
       queue.push(watcher);
     } else {
       // if already flushing, splice the watcher based on its id
@@ -4407,10 +4436,11 @@ function queueWatcher (watcher) {
     if (!waiting) {
       waiting = true;
 
-      if (!config.async) {
+      if ( !config.async) {
         flushSchedulerQueue();
         return
       }
+      // 刷新队列
       nextTick(flushSchedulerQueue);
     }
   }
@@ -4420,7 +4450,7 @@ function queueWatcher (watcher) {
 
 
 
-let uid$2 = 0;
+let uid$1 = 0;
 
 /**
  * A watcher parses an expression, collects dependencies,
@@ -4448,15 +4478,17 @@ class Watcher {
 
   constructor (
     vm,
-    expOrFn,
+    expOrFn,  // 关注这个
     cb,
     options,
     isRenderWatcher
   ) {
     this.vm = vm;
+    // 一个组件对应一个watcher，dep对应一个key
     if (isRenderWatcher) {
       vm._watcher = this;
     }
+    // 用户自己写的watcher
     vm._watchers.push(this);
     // options
     if (options) {
@@ -4469,14 +4501,15 @@ class Watcher {
       this.deep = this.user = this.lazy = this.sync = false;
     }
     this.cb = cb;
-    this.id = ++uid$2; // uid for batching
+    this.id = ++uid$1; // uid for batching
     this.active = true;
     this.dirty = this.lazy; // for lazy watchers
     this.deps = [];
     this.newDeps = [];
     this.depIds = new _Set();
     this.newDepIds = new _Set();
-    this.expression = expOrFn.toString();
+    this.expression =  expOrFn.toString()
+      ;
     // parse expression for getter
     if (typeof expOrFn === 'function') {
       this.getter = expOrFn;
@@ -4484,7 +4517,7 @@ class Watcher {
       this.getter = parsePath(expOrFn);
       if (!this.getter) {
         this.getter = noop;
-        warn(
+         warn(
           `Failed watching path: "${expOrFn}" ` +
           'Watcher only accepts simple dot-delimited paths. ' +
           'For full control, use a function instead.',
@@ -4527,11 +4560,14 @@ class Watcher {
   /**
    * Add a dependency to this directive.
    */
+  // watcher 和 dep相互添加
+  // 是一个多对多的关系
   addDep (dep) {
     const id = dep.id;
+    // 去重处理
     if (!this.newDepIds.has(id)) {
       this.newDepIds.add(id);
-      this.newDeps.push(dep);
+      this.newDeps.push(dep); // watcher里面为什么要保存dep？？
       if (!this.depIds.has(id)) {
         dep.addSub(this);
       }
@@ -4570,6 +4606,7 @@ class Watcher {
     } else if (this.sync) {
       this.run();
     } else {
+      // 更新的异步队列
       queueWatcher(this);
     }
   }
@@ -4703,7 +4740,7 @@ function initProps (vm, propsOptions) {
           vm
         );
       }
-      defineReactive$$1(props, key, value, () => {
+      defineReactive(props, key, value, () => {
         if (!isRoot && !isUpdatingChildComponent) {
           warn(
             `Avoid mutating a prop directly since the value will be ` +
@@ -4727,12 +4764,13 @@ function initProps (vm, propsOptions) {
 
 function initData (vm) {
   let data = vm.$options.data;
+   // 如果data是函数，则执行并将其结果作为data选项的值
   data = vm._data = typeof data === 'function'
     ? getData(data, vm)
     : data || {};
   if (!isPlainObject(data)) {
     data = {};
-    warn(
+     warn(
       'data functions should return an object:\n' +
       'https://vuejs.org/v2/guide/components.html#data-Must-Be-a-Function',
       vm
@@ -4754,7 +4792,7 @@ function initData (vm) {
       }
     }
     if (props && hasOwn(props, key)) {
-      warn(
+       warn(
         `The data property "${key}" is already declared as a prop. ` +
         `Use prop default value instead.`,
         vm
@@ -4791,7 +4829,7 @@ function initComputed (vm, computed) {
   for (const key in computed) {
     const userDef = computed[key];
     const getter = typeof userDef === 'function' ? userDef : userDef.get;
-    if (getter == null) {
+    if ( getter == null) {
       warn(
         `Getter is missing for computed property "${key}".`,
         vm
@@ -4842,7 +4880,8 @@ function defineComputed (
       : noop;
     sharedPropertyDefinition.set = userDef.set || noop;
   }
-  if (sharedPropertyDefinition.set === noop) {
+  if (
+      sharedPropertyDefinition.set === noop) {
     sharedPropertyDefinition.set = function () {
       warn(
         `Computed property "${key}" was assigned to but it has no setter.`,
@@ -4984,17 +5023,17 @@ function stateMixin (Vue) {
 
 /*  */
 
-let uid$3 = 0;
+let uid$2 = 0;
 
 function initMixin (Vue) {
   Vue.prototype._init = function (options) {
     const vm = this;
     // a uid
-    vm._uid = uid$3++;
+    vm._uid = uid$2++;
 
     let startTag, endTag;
     /* istanbul ignore if */
-    if (config.performance && mark) {
+    if ( config.performance && mark) {
       startTag = `vue-perf-start:${vm._uid}`;
       endTag = `vue-perf-end:${vm._uid}`;
       mark(startTag);
@@ -5004,11 +5043,13 @@ function initMixin (Vue) {
     vm._isVue = true;
     // merge options
     if (options && options._isComponent) {
+      // 自定义函数走这里
       // optimize internal component instantiation
       // since dynamic options merging is pretty slow, and none of the
       // internal component options needs special treatment.
       initInternalComponent(vm, options);
     } else {
+      // 根实例走这里
       vm.$options = mergeOptions(
         resolveConstructorOptions(vm.constructor),
         options || {},
@@ -5022,16 +5063,18 @@ function initMixin (Vue) {
     // expose real self
     vm._self = vm;
     initLifecycle(vm);
+    // 基础
     initEvents(vm);
     initRender(vm);
-    callHook(vm, 'beforeCreate');
+    callHook(vm, 'beforeCreate'); // beforeCreate拿不到date props相关数据
+    // 数据相关
     initInjections(vm); // resolve injections before data/props
-    initState(vm);
-    initProvide(vm); // resolve provide after data/props
+    initState(vm);   // 数据初始化
+    initProvide(vm); // resolve provide after data/props 给后代的数据
     callHook(vm, 'created');
 
     /* istanbul ignore if */
-    if (config.performance && mark) {
+    if ( config.performance && mark) {
       vm._name = formatComponentName(vm, false);
       mark(endTag);
       measure(`vue ${vm._name} init`, startTag, endTag);
@@ -5100,14 +5143,15 @@ function resolveModifiedOptions (Ctor) {
 }
 
 function Vue (options) {
-  if (!(this instanceof Vue)
+  if (
+    !(this instanceof Vue)
   ) {
     warn('Vue is a constructor and should be called with the `new` keyword');
   }
   this._init(options);
 }
 
-initMixin(Vue);
+initMixin(Vue);  // 添加了初始化方法 this._init
 stateMixin(Vue);
 eventsMixin(Vue);
 lifecycleMixin(Vue);
@@ -5168,7 +5212,7 @@ function initExtend (Vue) {
     }
 
     const name = extendOptions.name || Super.options.name;
-    if (name) {
+    if ( name) {
       validateComponentName(name);
     }
 
@@ -5251,7 +5295,7 @@ function initAssetRegisters (Vue) {
         return this.options[type + 's'][id]
       } else {
         /* istanbul ignore if */
-        if (type === 'component') {
+        if ( type === 'component') {
           validateComponentName(id);
         }
         if (type === 'component' && isPlainObject(definition)) {
@@ -5307,9 +5351,9 @@ function pruneCacheEntry (
   keys,
   current
 ) {
-  const cached$$1 = cache[key];
-  if (cached$$1 && (!current || cached$$1.tag !== current.tag)) {
-    cached$$1.componentInstance.$destroy();
+  const cached = cache[key];
+  if (cached && (!current || cached.tag !== current.tag)) {
+    cached.componentInstance.$destroy();
   }
   cache[key] = null;
   remove(keys, key);
@@ -5416,7 +5460,7 @@ function initGlobalAPI (Vue) {
     warn,
     extend,
     mergeOptions,
-    defineReactive: defineReactive$$1
+    defineReactive
   };
 
   Vue.set = set;
@@ -5431,7 +5475,7 @@ function initGlobalAPI (Vue) {
 
   Vue.options = Object.create(null);
   ASSET_TYPES.forEach(type => {
-    Vue.options[type + 's'] = Object.create(null);
+    Vue.options[type + 's'] = Object.create(null); // 合并配置项
   });
 
   // this is used to identify the "base" constructor to extend all plain-object
@@ -5446,6 +5490,7 @@ function initGlobalAPI (Vue) {
   initAssetRegisters(Vue);
 }
 
+// 初始化化全局api 比如 vue.minxins, vue.use
 initGlobalAPI(Vue);
 
 Object.defineProperty(Vue.prototype, '$isServer', {
@@ -5684,7 +5729,7 @@ function query (el) {
   if (typeof el === 'string') {
     const selected = document.querySelector(el);
     if (!selected) {
-      warn(
+       warn(
         'Cannot find element: ' + el
       );
       return document.createElement('div')
@@ -5754,6 +5799,7 @@ function setStyleScope (node, scopeId) {
 }
 
 var nodeOps = /*#__PURE__*/Object.freeze({
+  __proto__: null,
   createElement: createElement$1,
   createElementNS: createElementNS,
   createTextNode: createTextNode,
@@ -5816,6 +5862,7 @@ function registerRef (vnode, isRemoval) {
  * Virtual DOM patching algorithm based on Snabbdom by
  * Simon Friis Vindum (@paldepind)
  * Licensed under the MIT License
+ * 基于这个的虚拟dom算法
  * https://github.com/paldepind/snabbdom/blob/master/LICENSE
  *
  * modified by Evan You (@yyx990803)
@@ -5866,9 +5913,10 @@ function createKeyToOldIdx (children, beginIdx, endIdx) {
 function createPatchFunction (backend) {
   let i, j;
   const cbs = {};
-
+   // 传递进来属性和节点操作
   const { modules, nodeOps } = backend;
-
+  // modules 来源 src\platforms\web\runtime\modules\index.js
+  // 使用hooks的生命周期做遍历
   for (i = 0; i < hooks.length; ++i) {
     cbs[hooks[i]] = [];
     for (j = 0; j < modules.length; ++j) {
@@ -5883,13 +5931,13 @@ function createPatchFunction (backend) {
   }
 
   function createRmCb (childElm, listeners) {
-    function remove$$1 () {
-      if (--remove$$1.listeners === 0) {
+    function remove () {
+      if (--remove.listeners === 0) {
         removeNode(childElm);
       }
     }
-    remove$$1.listeners = listeners;
-    return remove$$1
+    remove.listeners = listeners;
+    return remove
   }
 
   function removeNode (el) {
@@ -5900,7 +5948,7 @@ function createPatchFunction (backend) {
     }
   }
 
-  function isUnknownElement$$1 (vnode, inVPre) {
+  function isUnknownElement (vnode, inVPre) {
     return (
       !inVPre &&
       !vnode.ns &&
@@ -5949,7 +5997,7 @@ function createPatchFunction (backend) {
         if (data && data.pre) {
           creatingElmInVPre++;
         }
-        if (isUnknownElement$$1(vnode, creatingElmInVPre)) {
+        if (isUnknownElement(vnode, creatingElmInVPre)) {
           warn(
             'Unknown custom element: <' + tag + '> - did you ' +
             'register the component correctly? For recursive components, ' +
@@ -5973,7 +6021,7 @@ function createPatchFunction (backend) {
         insert(parentElm, vnode.elm, refElm);
       }
 
-      if (data && data.pre) {
+      if ( data && data.pre) {
         creatingElmInVPre--;
       }
     } else if (isTrue(vnode.isComment)) {
@@ -6047,11 +6095,11 @@ function createPatchFunction (backend) {
     insert(parentElm, vnode.elm, refElm);
   }
 
-  function insert (parent, elm, ref$$1) {
+  function insert (parent, elm, ref) {
     if (isDef(parent)) {
-      if (isDef(ref$$1)) {
-        if (nodeOps.parentNode(ref$$1) === parent) {
-          nodeOps.insertBefore(parent, elm, ref$$1);
+      if (isDef(ref)) {
+        if (nodeOps.parentNode(ref) === parent) {
+          nodeOps.insertBefore(parent, elm, ref);
         }
       } else {
         nodeOps.appendChild(parent, elm);
@@ -6179,6 +6227,7 @@ function createPatchFunction (backend) {
     }
   }
 
+  // 子元素重排操作 算法的核心
   function updateChildren (parentElm, oldCh, newCh, insertedVnodeQueue, removeOnly) {
     let oldStartIdx = 0;
     let newStartIdx = 0;
@@ -6198,9 +6247,9 @@ function createPatchFunction (backend) {
     {
       checkDuplicateKeys(newCh);
     }
-
-    while (oldStartIdx <= oldEndIdx && newStartIdx <= newEndIdx) {
-      if (isUndef(oldStartVnode)) {
+    // 循环条件：开始索引不能大于结束索引
+    while (oldStartIdx <= oldEndIdx && newStartIdx <= newEndIdx) { // 循环结束的条件
+      if (isUndef(oldStartVnode)) { // 老节点怎么判断不存在？
         oldStartVnode = oldCh[++oldStartIdx]; // Vnode has been moved left
       } else if (isUndef(oldEndVnode)) {
         oldEndVnode = oldCh[--oldEndIdx];
@@ -6243,6 +6292,8 @@ function createPatchFunction (backend) {
         newStartVnode = newCh[++newStartIdx];
       }
     }
+
+    // 结束where的条件
     if (oldStartIdx > oldEndIdx) {
       refElm = isUndef(newCh[newEndIdx + 1]) ? null : newCh[newEndIdx + 1].elm;
       addVnodes(parentElm, refElm, newCh, newStartIdx, newEndIdx, insertedVnodeQueue);
@@ -6276,6 +6327,7 @@ function createPatchFunction (backend) {
     }
   }
 
+// diff 算法，比较两个节点
   function patchVnode (
     oldVnode,
     vnode,
@@ -6308,6 +6360,7 @@ function createPatchFunction (backend) {
     // note we only do this if the vnode is cloned -
     // if the new node is not cloned it means the render functions have been
     // reset by the hot-reload-api and we need to do a proper re-render.
+    // 判断是否静态节点，静态节点不需要判断
     if (isTrue(vnode.isStatic) &&
       isTrue(oldVnode.isStatic) &&
       vnode.key === oldVnode.key &&
@@ -6323,22 +6376,35 @@ function createPatchFunction (backend) {
       i(oldVnode, vnode);
     }
 
+    // 获取新旧孩子
     const oldCh = oldVnode.children;
     const ch = vnode.children;
+
+    // 属性更新
     if (isDef(data) && isPatchable(vnode)) {
-      for (i = 0; i < cbs.update.length; ++i) cbs.update[i](oldVnode, vnode);
+      for (i = 0; i < cbs.update.length; ++i) cbs.update[i](oldVnode, vnode);  // 所有的属性更新都会在cbs的update里做
       if (isDef(i = data.hook) && isDef(i = i.update)) i(oldVnode, vnode);
     }
+
+    // 新节点文本不存在？
     if (isUndef(vnode.text)) {
+      // 新老都存在孩子
       if (isDef(oldCh) && isDef(ch)) {
+        // 做孩子的更新
+        // 比孩子，递归
         if (oldCh !== ch) updateChildren(elm, oldCh, ch, insertedVnodeQueue, removeOnly);
       } else if (isDef(ch)) {
+        // 只有新的存在
         {
           checkDuplicateKeys(ch);
         }
+        // 清空文本
         if (isDef(oldVnode.text)) nodeOps.setTextContent(elm, '');
+        // 放入如新的孩子
         addVnodes(elm, null, ch, 0, ch.length - 1, insertedVnodeQueue);
       } else if (isDef(oldCh)) {
+        // 只有老的存在
+        // 直接清空
         removeVnodes(elm, oldCh, 0, oldCh.length - 1);
       } else if (isDef(oldVnode.text)) {
         nodeOps.setTextContent(elm, '');
@@ -6405,7 +6471,8 @@ function createPatchFunction (backend) {
           if (isDef(i = data) && isDef(i = i.domProps) && isDef(i = i.innerHTML)) {
             if (i !== elm.innerHTML) {
               /* istanbul ignore if */
-              if (typeof console !== 'undefined' &&
+              if (
+                typeof console !== 'undefined' &&
                 !hydrationBailed
               ) {
                 hydrationBailed = true;
@@ -6430,7 +6497,8 @@ function createPatchFunction (backend) {
             // longer than the virtual children list.
             if (!childrenMatch || childNode) {
               /* istanbul ignore if */
-              if (typeof console !== 'undefined' &&
+              if (
+                typeof console !== 'undefined' &&
                 !hydrationBailed
               ) {
                 hydrationBailed = true;
@@ -6465,7 +6533,7 @@ function createPatchFunction (backend) {
   function assertNodeMatch (node, vnode, inVPre) {
     if (isDef(vnode.tag)) {
       return vnode.tag.indexOf('vue-component') === 0 || (
-        !isUnknownElement$$1(vnode, inVPre) &&
+        !isUnknownElement(vnode, inVPre) &&
         vnode.tag.toLowerCase() === (node.tagName && node.tagName.toLowerCase())
       )
     } else {
@@ -6473,8 +6541,13 @@ function createPatchFunction (backend) {
     }
   }
 
+  // 这个就是挂载在VUE原型上的__patch__函数
+  // vdom => dom
+  // 同层比较 增 删 改
   return function patch (oldVnode, vnode, hydrating, removeOnly) {
+    // 新的不存在
     if (isUndef(vnode)) {
+      // 但是老的存在
       if (isDef(oldVnode)) invokeDestroyHook(oldVnode);
       return
     }
@@ -6482,16 +6555,22 @@ function createPatchFunction (backend) {
     let isInitialPatch = false;
     const insertedVnodeQueue = [];
 
+    // 老的不存在，新增
     if (isUndef(oldVnode)) {
       // empty mount (likely as component), create new root element
       isInitialPatch = true;
       createElm(vnode, insertedVnodeQueue);
     } else {
+      // 可能是更新操作
+      // 首先判断老节点类型，有可能真实dom？
       const isRealElement = isDef(oldVnode.nodeType);
+      // diff
       if (!isRealElement && sameVnode(oldVnode, vnode)) {
         // patch existing root node
+        // 执行补丁算法？？
         patchVnode(oldVnode, vnode, insertedVnodeQueue, null, null, removeOnly);
       } else {
+        // 如果是真节点
         if (isRealElement) {
           // mounting to a real element
           // check if this is server-rendered content and if we can perform
@@ -6516,22 +6595,25 @@ function createPatchFunction (backend) {
           }
           // either not server-rendered, or hydration failed.
           // create an empty node and replace it
+          // 删除一个空节点？
           oldVnode = emptyNodeAt(oldVnode);
         }
 
         // replacing existing element
+        // 存储老节点，获取老节点的父级
         const oldElm = oldVnode.elm;
         const parentElm = nodeOps.parentNode(oldElm);
 
         // create new node
+        // 创建新节点到dom树，创建完成后页面会短暂存在新老节点并存的情况
         createElm(
           vnode,
           insertedVnodeQueue,
           // extremely rare edge case: do not insert if old element is in a
           // leaving transition. Only happens when combining transition +
           // keep-alive + HOCs. (#4590)
-          oldElm._leaveCb ? null : parentElm,
-          nodeOps.nextSibling(oldElm)
+          oldElm._leaveCb ? null : parentElm,  // 把新节点放到父节点里
+          nodeOps.nextSibling(oldElm)     // 并且是放到老节点后面
         );
 
         // update parent placeholder node element, recursively
@@ -6565,6 +6647,7 @@ function createPatchFunction (backend) {
         }
 
         // destroy old node
+        // 删除老的节点
         if (isDef(parentElm)) {
           removeVnodes(parentElm, [oldVnode], 0, 0);
         } else if (isDef(oldVnode.tag)) {
@@ -7017,7 +7100,7 @@ function addHandler (
   // warn prevent and passive modifier
   /* istanbul ignore if */
   if (
-    warn &&
+     warn &&
     modifiers.prevent && modifiers.passive
   ) {
     warn(
@@ -7941,20 +8024,20 @@ function removeClass (el, cls) {
 
 /*  */
 
-function resolveTransition (def$$1) {
-  if (!def$$1) {
+function resolveTransition (def) {
+  if (!def) {
     return
   }
   /* istanbul ignore else */
-  if (typeof def$$1 === 'object') {
+  if (typeof def === 'object') {
     const res = {};
-    if (def$$1.css !== false) {
-      extend(res, autoCssTransition(def$$1.name || 'v'));
+    if (def.css !== false) {
+      extend(res, autoCssTransition(def.name || 'v'));
     }
-    extend(res, def$$1);
+    extend(res, def);
     return res
-  } else if (typeof def$$1 === 'string') {
-    return autoCssTransition(def$$1)
+  } else if (typeof def === 'string') {
+    return autoCssTransition(def)
   }
 }
 
@@ -8208,7 +8291,7 @@ function enter (vnode, toggleDisplay) {
       : duration
   );
 
-  if (explicitEnterDuration != null) {
+  if ( explicitEnterDuration != null) {
     checkDuration(explicitEnterDuration, 'enter', vnode);
   }
 
@@ -8318,7 +8401,7 @@ function leave (vnode, rm) {
       : duration
   );
 
-  if (isDef(explicitLeaveDuration)) {
+  if ( isDef(explicitLeaveDuration)) {
     checkDuration(explicitLeaveDuration, 'leave', vnode);
   }
 
@@ -8458,8 +8541,10 @@ var platformModules = [
 
 // the directive module should be applied last, after all
 // built-in modules have been applied.
+// platformModules 用于元素的属性更新
 const modules = platformModules.concat(baseModules);
-
+// nodeOps 都是dom节点操作的api（增删改查）
+// createPatchFunction 给patch扩容dom的相关操作
 const patch = createPatchFunction({ nodeOps, modules });
 
 /**
@@ -8545,7 +8630,7 @@ function actuallySetSelected (el, binding, vm) {
   const value = binding.value;
   const isMultiple = el.multiple;
   if (isMultiple && !Array.isArray(value)) {
-    warn(
+     warn(
       `<select multiple v-model="${binding.expression}"> ` +
       `expects an Array value for its binding, but got ${
         Object.prototype.toString.call(value).slice(8, -1)
@@ -8615,10 +8700,10 @@ function locateNode (vnode) {
 var show = {
   bind (el, { value }, vnode) {
     vnode = locateNode(vnode);
-    const transition$$1 = vnode.data && vnode.data.transition;
+    const transition = vnode.data && vnode.data.transition;
     const originalDisplay = el.__vOriginalDisplay =
       el.style.display === 'none' ? '' : el.style.display;
-    if (value && transition$$1) {
+    if (value && transition) {
       vnode.data.show = true;
       enter(vnode, () => {
         el.style.display = originalDisplay;
@@ -8632,8 +8717,8 @@ var show = {
     /* istanbul ignore if */
     if (!value === !oldValue) return
     vnode = locateNode(vnode);
-    const transition$$1 = vnode.data && vnode.data.transition;
-    if (transition$$1) {
+    const transition = vnode.data && vnode.data.transition;
+    if (transition) {
       vnode.data.show = true;
       if (value) {
         enter(vnode, () => {
@@ -8757,7 +8842,7 @@ var Transition = {
     }
 
     // warn multiple elements
-    if (children.length > 1) {
+    if ( children.length > 1) {
       warn(
         '<transition> can only be used on a single element. Use ' +
         '<transition-group> for lists.',
@@ -8768,7 +8853,8 @@ var Transition = {
     const mode = this.mode;
 
     // warn invalid mode
-    if (mode && mode !== 'in-out' && mode !== 'out-in'
+    if (
+      mode && mode !== 'in-out' && mode !== 'out-in'
     ) {
       warn(
         'invalid <transition> mode: ' + mode,
@@ -9040,7 +9126,7 @@ extend(Vue.options.directives, platformDirectives);
 extend(Vue.options.components, platformComponents);
 
 // install platform patch function
-Vue.prototype.__patch__ = inBrowser ? patch : noop;
+Vue.prototype.__patch__ = inBrowser ? patch : noop;   // __patch__ 这类命名一般是不让用户外部调用，给到内部自己调
 
 // public mount method
 Vue.prototype.$mount = function (
@@ -9048,7 +9134,7 @@ Vue.prototype.$mount = function (
   hydrating
 ) {
   el = el && inBrowser ? query(el) : undefined;
-  return mountComponent(this, el, hydrating)
+  return mountComponent(this, el, hydrating)  // 把虚拟dom变成真实dom
 };
 
 // devtools global hook
@@ -9065,7 +9151,8 @@ if (inBrowser) {
         );
       }
     }
-    if (config.productionTip !== false &&
+    if (
+      config.productionTip !== false &&
       typeof console !== 'undefined'
     ) {
       console[console.info ? 'info' : 'log'](
@@ -9130,7 +9217,7 @@ function parseText (
 function transformNode (el, options) {
   const warn = options.warn || baseWarn;
   const staticClass = getAndRemoveAttr(el, 'class');
-  if (staticClass) {
+  if ( staticClass) {
     const res = parseText(staticClass, options.delimiters);
     if (res) {
       warn(
@@ -9293,8 +9380,8 @@ function decodeAttr (value, shouldDecodeNewlines) {
 function parseHTML (html, options) {
   const stack = [];
   const expectHTML = options.expectHTML;
-  const isUnaryTag$$1 = options.isUnaryTag || no;
-  const canBeLeftOpenTag$$1 = options.canBeLeftOpenTag || no;
+  const isUnaryTag = options.isUnaryTag || no;
+  const canBeLeftOpenTag = options.canBeLeftOpenTag || no;
   let index = 0;
   let last, lastTag;
   while (html) {
@@ -9408,7 +9495,7 @@ function parseHTML (html, options) {
 
     if (html === last) {
       options.chars && options.chars(html);
-      if (!stack.length && options.warn) {
+      if ( !stack.length && options.warn) {
         options.warn(`Mal-formatted tag at end of template: "${html}"`, { start: index + html.length });
       }
       break
@@ -9456,12 +9543,12 @@ function parseHTML (html, options) {
       if (lastTag === 'p' && isNonPhrasingTag(tagName)) {
         parseEndTag(lastTag);
       }
-      if (canBeLeftOpenTag$$1(tagName) && lastTag === tagName) {
+      if (canBeLeftOpenTag(tagName) && lastTag === tagName) {
         parseEndTag(tagName);
       }
     }
 
-    const unary = isUnaryTag$$1(tagName) || !!unarySlash;
+    const unary = isUnaryTag(tagName) || !!unarySlash;
 
     const l = match.attrs.length;
     const attrs = new Array(l);
@@ -9475,7 +9562,7 @@ function parseHTML (html, options) {
         name: args[1],
         value: decodeAttr(value, shouldDecodeNewlines)
       };
-      if (options.outputSourceRange) {
+      if ( options.outputSourceRange) {
         attrs[i].start = args.start + args[0].match(/^\s*/).length;
         attrs[i].end = args.end;
       }
@@ -9512,7 +9599,8 @@ function parseHTML (html, options) {
     if (pos >= 0) {
       // Close all the open elements, up the stack
       for (let i = stack.length - 1; i >= pos; i--) {
-        if (i > pos || !tagName &&
+        if (
+          (i > pos || !tagName) &&
           options.warn
         ) {
           options.warn(
@@ -9546,7 +9634,7 @@ function parseHTML (html, options) {
 /*  */
 
 const onRE = /^@|^v-on:/;
-const dirRE = /^v-|^@|^:/;
+const dirRE =  /^v-|^@|^:/;
 const forAliasRE = /([\s\S]*?)\s+(?:in|of)\s+([\s\S]*)/;
 const forIteratorRE = /,([^,\}\]]*)(?:,([^,\}\]]*))?$/;
 const stripParensRE = /^\(|\)$/g;
@@ -9772,7 +9860,7 @@ function parse (
 
       if (isForbiddenTag(element) && !isServerRendering()) {
         element.forbidden = true;
-        warn$2(
+         warn$2(
           'Templates should only be responsible for mapping the state to the ' +
           'UI. Avoid placing tags with side-effects in your templates, such as ' +
           `<${tag}>` + ', as they will not be parsed.',
@@ -9823,7 +9911,7 @@ function parse (
       // pop stack
       stack.length -= 1;
       currentParent = stack[stack.length - 1];
-      if (options.outputSourceRange) {
+      if ( options.outputSourceRange) {
         element.end = end;
       }
       closeElement(element);
@@ -9892,7 +9980,7 @@ function parse (
           };
         }
         if (child) {
-          if (options.outputSourceRange) {
+          if ( options.outputSourceRange) {
             child.start = start;
             child.end = end;
           }
@@ -9909,7 +9997,7 @@ function parse (
           text,
           isComment: true
         };
-        if (options.outputSourceRange) {
+        if ( options.outputSourceRange) {
           child.start = start;
           child.end = end;
         }
@@ -10084,7 +10172,7 @@ function findPrevElement (children) {
     if (children[i].type === 1) {
       return children[i]
     } else {
-      if (children[i].text !== ' ') {
+      if ( children[i].text !== ' ') {
         warn$2(
           `text "${children[i].text.trim()}" between v-if and v-else(-if) ` +
           `will be ignored.`,
@@ -10104,8 +10192,8 @@ function addIfCondition (el, condition) {
 }
 
 function processOnce (el) {
-  const once$$1 = getAndRemoveAttr(el, 'v-once');
-  if (once$$1 != null) {
+  const once = getAndRemoveAttr(el, 'v-once');
+  if (once != null) {
     el.once = true;
   }
 }
@@ -10117,7 +10205,7 @@ function processSlotContent (el) {
   if (el.tag === 'template') {
     slotScope = getAndRemoveAttr(el, 'scope');
     /* istanbul ignore if */
-    if (slotScope) {
+    if ( slotScope) {
       warn$2(
         `the "scope" attribute for scoped slots have been deprecated and ` +
         `replaced by "slot-scope" since 2.5. The new "slot-scope" attribute ` +
@@ -10130,7 +10218,7 @@ function processSlotContent (el) {
     el.slotScope = slotScope || getAndRemoveAttr(el, 'slot-scope');
   } else if ((slotScope = getAndRemoveAttr(el, 'slot-scope'))) {
     /* istanbul ignore if */
-    if (el.attrsMap['v-for']) {
+    if ( el.attrsMap['v-for']) {
       warn$2(
         `Ambiguous combined usage of slot-scope and v-for on <${el.tag}> ` +
         `(v-for takes higher priority). Use a wrapper <template> for the ` +
@@ -10250,7 +10338,7 @@ function getSlotName (binding) {
 function processSlotOutlet (el) {
   if (el.tag === 'slot') {
     el.slotName = getBindingAttr(el, 'name');
-    if (el.key) {
+    if ( el.key) {
       warn$2(
         `\`key\` does not work on <slot> because slots are abstract outlets ` +
         `and can possibly expand into multiple elements. ` +
@@ -10294,6 +10382,7 @@ function processAttrs (el) {
           name = name.slice(1, -1);
         }
         if (
+          
           value.trim().length === 0
         ) {
           warn$2(
@@ -10374,7 +10463,7 @@ function processAttrs (el) {
           }
         }
         addDirective(el, name, rawName, value, arg, isDynamic, modifiers, list[i]);
-        if (name === 'model') {
+        if ( name === 'model') {
           checkForAliasModel(el, value);
         }
       }
@@ -10428,6 +10517,7 @@ function makeAttrsMap (attrs) {
   const map = {};
   for (let i = 0, l = attrs.length; i < l; i++) {
     if (
+      
       map[attrs[i].name] && !isIE && !isEdge
     ) {
       warn$2('duplicate attribute: ' + attrs[i].name, attrs[i]);
@@ -10895,7 +10985,7 @@ function genFilterCode (key) {
 /*  */
 
 function on (el, dir) {
-  if (dir.modifiers) {
+  if ( dir.modifiers) {
     warn(`v-on without argument does not support modifiers.`);
   }
   el.wrapListeners = (code) => `_g(${code},${dir.value})`;
@@ -11044,7 +11134,7 @@ function genOnce (el, state) {
       parent = parent.parent;
     }
     if (!key) {
-      state.warn(
+       state.warn(
         `v-once can only be used inside v-for that is keyed. `,
         el.rawAttrsMap['v-once']
       );
@@ -11108,7 +11198,8 @@ function genFor (
   const iterator1 = el.iterator1 ? `,${el.iterator1}` : '';
   const iterator2 = el.iterator2 ? `,${el.iterator2}` : '';
 
-  if (state.maybeComponent(el) &&
+  if (
+    state.maybeComponent(el) &&
     el.tag !== 'slot' &&
     el.tag !== 'template' &&
     !el.key
@@ -11252,7 +11343,9 @@ function genDirectives (el, state) {
 
 function genInlineTemplate (el, state) {
   const ast = el.children[0];
-  if (el.children.length !== 1 || ast.type !== 1) {
+  if ( (
+    el.children.length !== 1 || ast.type !== 1
+  )) {
     state.warn(
       'Inline-template components must have exactly one child element.',
       { start: el.start }
@@ -11466,15 +11559,15 @@ function genSlot (el, state) {
         dynamic: attr.dynamic
       })))
     : null;
-  const bind$$1 = el.attrsMap['v-bind'];
-  if ((attrs || bind$$1) && !children) {
+  const bind = el.attrsMap['v-bind'];
+  if ((attrs || bind) && !children) {
     res += `,null`;
   }
   if (attrs) {
     res += `,${attrs}`;
   }
-  if (bind$$1) {
-    res += `${attrs ? '' : ',null'},${bind$$1}`;
+  if (bind) {
+    res += `${attrs ? '' : ',null'},${bind}`;
   }
   return res + ')'
 }
@@ -11496,7 +11589,7 @@ function genProps (props) {
   let dynamicProps = ``;
   for (let i = 0; i < props.length; i++) {
     const prop = props[i];
-    const value = transformSpecialNewlines(prop.value);
+    const value =  transformSpecialNewlines(prop.value);
     if (prop.dynamic) {
       dynamicProps += `${prop.name},${value},`;
     } else {
@@ -11703,7 +11796,7 @@ function createCompileToFunctionFn (compile) {
     vm
   ) {
     options = extend({}, options);
-    const warn$$1 = options.warn || warn;
+    const warn$1 = options.warn || warn;
     delete options.warn;
 
     /* istanbul ignore if */
@@ -11713,7 +11806,7 @@ function createCompileToFunctionFn (compile) {
         new Function('return 1');
       } catch (e) {
         if (e.toString().match(/unsafe-eval|CSP/)) {
-          warn$$1(
+          warn$1(
             'It seems you are using the standalone build of Vue.js in an ' +
             'environment with Content Security Policy that prohibits unsafe-eval. ' +
             'The template compiler cannot work in this environment. Consider ' +
@@ -11740,14 +11833,14 @@ function createCompileToFunctionFn (compile) {
       if (compiled.errors && compiled.errors.length) {
         if (options.outputSourceRange) {
           compiled.errors.forEach(e => {
-            warn$$1(
+            warn$1(
               `Error compiling template:\n\n${e.msg}\n\n` +
               generateCodeFrame(template, e.start, e.end),
               vm
             );
           });
         } else {
-          warn$$1(
+          warn$1(
             `Error compiling template:\n\n${template}\n\n` +
             compiled.errors.map(e => `- ${e}`).join('\n') + '\n',
             vm
@@ -11777,7 +11870,7 @@ function createCompileToFunctionFn (compile) {
     /* istanbul ignore if */
     {
       if ((!compiled.errors || !compiled.errors.length) && fnGenErrors.length) {
-        warn$$1(
+        warn$1(
           `Failed to generate render function:\n\n` +
           fnGenErrors.map(({ err, code }) => `${err.toString()} in\n\n${code}\n`).join('\n'),
           vm
@@ -11806,7 +11899,7 @@ function createCompilerCreator (baseCompile) {
       };
 
       if (options) {
-        if (options.outputSourceRange) {
+        if ( options.outputSourceRange) {
           // $flow-disable-line
           const leadingSpaceLength = template.match(/^\s*/)[0].length;
 
@@ -11909,15 +12002,16 @@ const idToTemplate = cached(id => {
 });
 
 const mount = Vue.prototype.$mount;
+// 接管$mount
 Vue.prototype.$mount = function (
-  el,
+  el, // #app | document.querySelector('#app')
   hydrating
 ) {
   el = el && query(el);
 
   /* istanbul ignore if */
   if (el === document.body || el === document.documentElement) {
-    warn(
+     warn(
       `Do not mount Vue to <html> or <body> - mount to normal elements instead.`
     );
     return this
@@ -11932,7 +12026,7 @@ Vue.prototype.$mount = function (
         if (template.charAt(0) === '#') {
           template = idToTemplate(template);
           /* istanbul ignore if */
-          if (!template) {
+          if ( !template) {
             warn(
               `Template element not found or is empty: ${options.template}`,
               this
@@ -11950,29 +12044,34 @@ Vue.prototype.$mount = function (
     } else if (el) {
       template = getOuterHTML(el);
     }
+
+    // 开始编译过程(只有没设置render的时候才用)
     if (template) {
       /* istanbul ignore if */
-      if (config.performance && mark) {
+      if ( config.performance && mark) {
         mark('compile');
       }
-
+      // 把template转成render函数
       const { render, staticRenderFns } = compileToFunctions(template, {
         outputSourceRange: "development" !== 'production',
         shouldDecodeNewlines,
         shouldDecodeNewlinesForHref,
-        delimiters: options.delimiters,
+        delimiters: options.delimiters,  // 分隔符 vue默认{{}}
         comments: options.comments
       }, this);
+      // render赋值
       options.render = render;
       options.staticRenderFns = staticRenderFns;
 
       /* istanbul ignore if */
-      if (config.performance && mark) {
+      if ( config.performance && mark) {
         mark('compile end');
         measure(`vue ${this._name} compile`, 'compile', 'compile end');
       }
     }
   }
+
+  // 挂载：生成vdom，生成dom，追加到el
   return mount.call(this, el, hydrating)
 };
 
